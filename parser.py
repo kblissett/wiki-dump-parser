@@ -5,6 +5,7 @@ sys.setdefaultencoding('utf8')
 import re
 import os
 from lxml import etree
+import argparse
 import mwparserfromhell
 from src import plaintext
 from src import gensimplaintext
@@ -13,180 +14,159 @@ from src import gensimplaintext
  Wikipedia XML dump parser
 '''
 
-def fast_iter_outlink(context, outdir, name):
-    out = open('%s/outlink-%s' % (outdir, name), 'w')
+def fast_iter(context, res, err, select=set(),
+              get_outlink=False, get_redirect=False, get_disambiguation=False,
+              get_text=False, get_markup=False):
     for event, elem in context:
-        try:
-            wikicode = mwparserfromhell.parse(elem.text)
-            outlinks = wikicode.filter_wikilinks()
-            for i in outlinks:
-                out.write('%s\n' % i)
-        except:
-            err = open('%s/outlink.error' % outdir, 'aw')
-            err.write('OUTLINK: %\s\t%s\n' % (name, sys.exc_info()[0]))
-        elem.clear()
-        while elem.getprevious() is not None:
-            del elem.getparent()[0]
-    del context
-
-def find_redirect(elem, out):
-    title = elem.find(namespace+'title').text
-    m = elem.find(namespace+'redirect')
-    if m != None:
-        redirect = m.attrib['title']
-        out.write('%s\t%s\n' % (title, redirect))
-
-def fast_iter_redirect(context, outdir, name):
-    out = open('%s/redirect-%s' % (outdir, name), 'w')
-    for event, elem in context:
-        try:
-            find_redirect(elem, out)
-        except:
-            err = open('%s/redirect.error' % outdir, 'aw')
-            title = elem.find(namespace+'title').text
-            err.write('REDIRECT: %s\t%s\t%s\n' % \
-                      (name, title, sys.exc_info()[0]))
-        elem.clear()
-        while elem.getprevious() is not None:
-            del elem.getparent()[0]
-    del context
-
-def fast_iter_disambiguation(context, outdir, name):
-    out = open('%s/disambiguation-%s' % (outdir, name), 'w')
-    for event, elem in context:
-        title = elem.find(namespace+'title').text
-        text = elem.find(namespace+'revision').find(namespace+'text').text
-        try:
-            if text != None and '{{disambiguation}}' in text.lower():
-                out.write('%s\n' % title)
-        except:
-            err = open('%s/disambiguation.error' % outdir, 'aw')
-            err.write('DISAMBIGUATION: %s\t%s\t%s\n' % \
-                      (name, title, sys.exc_info()[0]))
-        elem.clear()
-        while elem.getprevious() is not None:
-            del elem.getparent()[0]
-    del context
-
-def fast_iter_text(context, outdir, name, select=set()):
-    for event, elem in context:
-        id_ = elem.find(namespace+'id').text
-        if select != set() and id_ not in select:
+        id_ = elem.find(NAMESPACE+'id').text
+        if select and id_ not in select:
             continue
-        title = elem.find(namespace+'title').text
-        text = elem.find(namespace+'revision').find(namespace+'text').text
-        try:
-            if text == None:
-                ptext = ''
-            else:
-                # ptext = plaintext.get_plaintext(text)
-                ptext = gensimplaintext.filter_wiki(text)
-            if os.path.isfile('%s/%s' % (outdir, id_)):
-                raise Exception('Duplicated ID: %s' % id_)
-            out = open('%s/%s' % (outdir, id_), 'w')
-            out.write('%s\t%s\n%s' % (id_, title, ptext))
-        except:
-            err = open('%s/text.error' % outdir, 'aw')
-            err.write('TEXT: %s\t%s\t%s\n' % \
-                      (name, title, sys.exc_info()[0]))
-        elem.clear()
-        while elem.getprevious() is not None:
-            del elem.getparent()[0]
-    del context
-
-def fast_iter_title(context, outdir, name):
-    out = open('%s/title-%s' % (outdir, name), 'w')
-    for event, elem in context:
-        id_ = elem.find(namespace+'id').text
-        title = elem.find(namespace+'title').text
-        try:
-            out.write('%s:%s\n' % (id_, title))
-        except:
-            err = open('%s/title.error' % outdir, 'aw')
-            err.write('TITLE: %s\t%s\t%s\n' % \
-                      (name, title, sys.exc_info()[0]))
-        elem.clear()
-        while elem.getprevious() is not None:
-            del elem.getparent()[0]
-    del context
-
-# def fast_iter_pair(context):
-#     for event, elem in context:
-#         if elem.text != None:
-#             try: # TODO: find more patterns
-#                 # tmp = re.findall('\{\{\S{2}\|\S\=.*?\}\}', elem.text)
-#                 # for i in tmp:
-#                 #     out.write('%s\n' % i)
-#                 ptext = gensimplaintext.filter_wiki(elem.text)
-#                 tmp = re.findall('\(Hausa\: .+\)', ptext)
-#                 for i in tmp:
-#                     out.write('%s\n' % i)
-#             except:
-#                 err.write('%s\n%s\n' % (name, elem.text))
-
-#         elem.clear()
-#         while elem.getprevious() is not None:
-#             del elem.getparent()[0]
-#     del context
-
-def fast_iter_markup(context, outdir, name, select=set()):
-    for event, elem in context:
-        id_ = elem.find(namespace+'id').text
-        if select != set() and id_ not in select:
+        title = elem.find(NAMESPACE+'title').text
+        text = elem.find(NAMESPACE+'revision').find(NAMESPACE+'text').text
+        if text is None:
             continue
-        title = elem.find(namespace+'title').text
-        markup = elem.find(namespace+'revision').find(namespace+'text').text
-        '''
-        title (str): wiki page title
-        markup (str): wiki markup of this page
-        '''
+
+        # Outlink: (outlink)
+        if get_outlink:
+            try: # TODO: replace moudle mwparserfromhell
+                wikicode = mwparserfromhell.parse(text)
+                outlinks = wikicode.filter_wikilinks()
+                res['outlink'] += outlinks
+            except:
+                err['outlink'].append((id_, title, sys.exc_info()))
+
+        # Redirect: (id_, title, redirected_title)
+        if get_redirect:
+            m = elem.find(NAMESPACE+'redirect')
+            if m is not None:
+                redirected_title = m.attrib['title']
+                res['redirect'].append((id_, title, redirected_title))
+
+        # Disambiguation: (id_, title)
+        if get_disambiguation:
+            if '{{disambiguation}}' in text.lower():
+                res['disambiguation'].append((id_, title))
+
+        # Plain Text: (id_, title, ptext)
+        if get_text:
+            # ptext = plaintext.get_plaintext(text)
+            ptext = gensimplaintext.filter_wiki(text)
+            res['text'].append((id_, title, ptext))
+
+        # Wiki Markup: (id_, title, text)
+        if get_markup:
+            res['markup'].append((id_, title, text))
+
         elem.clear()
         while elem.getprevious() is not None:
             del elem.getparent()[0]
     del context
 
 def main():
-    if len(sys.argv) != 3:
-        print 'USAGE: wiki-dump_parser.py' \
-            ' <langwiki-latest-pages-articles-multistream.xml>' \
-            ' <output directory>'
-        sys.exit()
-    infile = sys.argv[1]
-    outdir = sys.argv[2]
+    parser = argparse.ArgumentParser(description=\
+                                     "Wikipedia XML dump parser")
+    parser.add_argument("inpath",
+                        help='Path to wiki-pages-articles-multistream.xml')
+    parser.add_argument("outdir",
+                        help='Output dir')
+    parser.add_argument('--outlink', '-o', action='store_true',
+                        help='Outlink')
+    parser.add_argument('--redirect', '-r', action='store_true',
+                        help='Redirect')
+    parser.add_argument('--disambiguation', '-d', action='store_true',
+                        help='Disambiguation')
+    parser.add_argument('--text', '-t', action='store_true',
+                        help='Plain text')
+    parser.add_argument('--markup', '-m', action='store_true',
+                        help='Wiki markup')
+    try:
+        args = parser.parse_args()
+    except IOError, msg:
+        parser.error(str(msg))
 
-    path = os.path.split(infile)[0]
-    name = os.path.split(infile)[1].replace('.xml', '')
+    inpath = args.inpath
+    outdir = args.outdir
+    path = os.path.split(inpath)[0]
+    filename = os.path.split(inpath)[1].replace('.xml', '')
     try:
         os.mkdir(outdir)
     except:
         pass
 
-    global namespace
-    namespace = '{http://www.mediawiki.org/xml/export-0.10/}'
+    global NAMESPACE
+    NAMESPACE = '{http://www.mediawiki.org/xml/export-0.10/}'
 
-    # ### Outlink
-    # context = etree.iterparse(infile, events=('end',), tag=namespace+'text')
-    # fast_iter_outlink(context, outdir, name)
+    cat = ['outlink', 'redirect', 'disambiguation', 'text', 'markup']
+    res = dict()
+    err = dict()
+    for c in cat:
+        res[c] = list()
+        err[c] = list()
+    context = etree.iterparse(inpath, events=('end',), tag=NAMESPACE+'page')
+    fast_iter(context, res, err, select=set(),
+              get_outlink=args.outlink,
+              get_redirect=args.redirect,
+              get_disambiguation=args.disambiguation,
+              get_text=args.text,
+              get_markup=args.markup)
 
-    # ### Redirect
-    # context = etree.iterparse(infile, events=('end',), tag=namespace+'page')
-    # fast_iter_redirect(context, outdir, name)
+    # Outlink
+    if args.outlink:
+        out = open('%s/%s-%s' % (outdir, 'outlink', filename), 'w')
+        for i in res['outlink']:
+            out.write(str(i) + '\n')
+        out.close()
 
-    # ### Disambiguation
-    # context = etree.iterparse(infile, events=('end',), tag=namespace+'page')
-    # fast_iter_disambiguation(context, outdir, name)
+    # Redirect
+    if args.redirect:
+        out = open('%s/%s-%s' % (outdir, 'redirect', filename), 'w')
+        for i in res['redirect']:
+            out.write('\t'.join(i) + '\n')
+        out.close()
 
-    # ### PLAIN TEXT
-    # try:
-    #     os.mkdir('%s/text' % outdir)
-    # except:
-    #     pass
-    # context = etree.iterparse(infile, events=('end',), tag=namespace+'page')
-    # fast_iter_text(context, '%s/text' % outdir, name, select=set())
+    # Disambiguation
+    if args.disambiguation:
+        out = open('%s/%s-%s' % (outdir, 'disambiguation', filename), 'w')
+        for i in res['disambiguation']:
+            out.write('\t'.join(i) + '\n')
+        out.close()
 
-    # ### TITLE
-    # context = etree.iterparse(infile, events=('end',), tag=namespace+'page')
-    # fast_iter_title(context, outdir, name)
+    # Plain Text
+    if args.text:
+        try:
+            os.mkdir('%s/text' % outdir)
+        except:
+            pass
+        for i in res['text']:
+            id_, title, ptext = i
+            if os.path.isfile('%s/text/%s' % (outdir, id_)):
+                err['text'].append((id_, title, 'Duplicated ID'))
+                continue
+            out = open('%s/text/%s' % (outdir, id_), 'w')
+            out.write('%s\t%s\n%s' % (id_, title, ptext))
+            out.close()
+
+    # Wiki Markup
+    if args.markup:
+        try:
+            os.mkdir('%s/markup' % outdir)
+        except:
+            pass
+        for i in res['markup']:
+            id_, title, markup = i
+            if os.path.isfile('%s/markup/%s' % (outdir, id_)):
+                err['markup'].append((id_, title, 'Duplicated ID'))
+                continue
+            out = open('%s/markup/%s' % (outdir, id_), 'w')
+            out.write('%s\t%s\n%s' % (id_, title, markup))
+            out.close()
+
+    for c in cat:
+        if err[c]:
+            out_err = open('%s/%s-%s.err' % (outdir, c, filename), 'w')
+            for i in err[c]:
+                out_err.write(str(i) + '\n')
+            out_err.close()
 
 if __name__ == '__main__':
     main()
