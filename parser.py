@@ -4,8 +4,10 @@ reload(sys)
 sys.setdefaultencoding('utf8')
 import re
 import os
-from lxml import etree
+import time
 import argparse
+from lxml import etree
+from bz2file import BZ2File
 import mwparserfromhell
 from src import plaintext
 from src import gensimplaintext
@@ -21,6 +23,9 @@ def fast_iter(context, res, err, select=set(),
         id_ = elem.find(NAMESPACE+'id').text
         if select and id_ not in select:
             continue
+        ns = elem.find(NAMESPACE+'ns').text
+        if ns != '0': # Main page only
+            continue
         title = elem.find(NAMESPACE+'title').text
         text = elem.find(NAMESPACE+'revision').find(NAMESPACE+'text').text
         if text is None:
@@ -30,7 +35,8 @@ def fast_iter(context, res, err, select=set(),
         if get_outlink:
             try: # TODO: replace moudle mwparserfromhell
                 wikicode = mwparserfromhell.parse(text)
-                outlinks = wikicode.filter_wikilinks()
+                # outlinks = wikicode.filter_wikilinks()
+                outlinks = [str(i) for i in wikicode.filter_wikilinks()]
                 res['outlink'] += outlinks
             except:
                 err['outlink'].append((id_, title, sys.exc_info()))
@@ -66,7 +72,7 @@ def main():
     parser = argparse.ArgumentParser(description=\
                                      "Wikipedia XML dump parser")
     parser.add_argument("inpath",
-                        help='Path to wiki-pages-articles-multistream.xml')
+                        help='Path to wiki-pages-articles-multistream.xml.bz')
     parser.add_argument("outdir",
                         help='Output dir')
     parser.add_argument('--outlink', '-o', action='store_true',
@@ -102,7 +108,12 @@ def main():
     for c in cat:
         res[c] = list()
         err[c] = list()
-    context = etree.iterparse(inpath, events=('end',), tag=NAMESPACE+'page')
+
+    if inpath.endswith('.bz2'):
+        context = etree.iterparse(BZ2File(inpath), events=('end',),
+                                  tag=NAMESPACE+'page')
+    else:
+        context = etree.iterparse(inpath, events=('end',), tag=NAMESPACE+'page')
     fast_iter(context, res, err, select=set(),
               get_outlink=args.outlink,
               get_redirect=args.redirect,
@@ -114,7 +125,7 @@ def main():
     if args.outlink:
         out = open('%s/%s-%s' % (outdir, 'outlink', filename), 'w')
         for i in res['outlink']:
-            out.write(str(i) + '\n')
+            out.write(i + '\n')
         out.close()
 
     # Redirect
@@ -169,4 +180,6 @@ def main():
             out_err.close()
 
 if __name__ == '__main__':
+    s = time.time()
     main()
+    print time.time() - s
