@@ -4,13 +4,13 @@ reload(sys)
 sys.setdefaultencoding('utf8')
 import re
 import os
+import io
 import time
 import argparse
 import multiprocessing
 from lxml import etree
-from bz2file import BZ2File
-from bz2 import decompress
-from io import BytesIO
+import bz2file
+# from bz2 import decompress
 import mwparserfromhell
 from src import plaintext
 from src import gensimplaintext
@@ -21,72 +21,88 @@ from src import gensimplaintext
 
 def fast_iter(pages, select=set(),
               get_outlink=False, get_redirect=False, get_disambiguation=False,
-              get_text=False, get_markup=False):
-    res = dict()
-    err = dict()
-    for c in CATEGORY:
-        res[c] = list()
-        err[c] = list()
+              get_title=False, get_text=False, get_markup=False):
+    try:
+        res = dict()
+        err = dict()
+        for c in CATEGORY:
+            res[c] = list()
+            err[c] = list()
 
-    context = etree.iterparse(pages, events=('end',), tag=NAMESPACE+'page')
-    for event, elem in context:
-        id_ = elem.find(NAMESPACE+'id').text
-        if select and id_ not in select:
-            continue
-        ns = elem.find(NAMESPACE+'ns').text
-        if ns != '0': # Main page only
-            continue
-        title = elem.find(NAMESPACE+'title').text
-        text = elem.find(NAMESPACE+'revision').find(NAMESPACE+'text').text
-        if text is None:
-            continue
+        # print '%s starts' % os.getpid()
+        context = etree.iterparse(pages, events=('end',), tag=NAMESPACE+'page')
+        for event, elem in context:
+            id_ = elem.find(NAMESPACE+'id').text
+            if select and id_ not in select:
+                continue
+            ns = elem.find(NAMESPACE+'ns').text
+            if ns != '0': # Main page only
+                continue
+            title = elem.find(NAMESPACE+'title').text
+            text = elem.find(NAMESPACE+'revision').find(NAMESPACE+'text').text
+            if text is None:
+                continue
 
-        # Outlink: (outlink)
-        if get_outlink:
-            try:
-                wikicode = mwparserfromhell.parse(text)
-                # outlinks = wikicode.filter_wikilinks()
-                outlinks = [str(i) for i in wikicode.filter_wikilinks()]
-                res['outlink'] += outlinks
-            except:
-                err['outlink'].append((id_, title, sys.exc_info()))
+            # Outlink: (outlink)
+            if get_outlink:
+                try:
+                    wikicode = mwparserfromhell.parse(text)
+                    # outlinks = wikicode.filter_wikilinks()
+                    outlinks = [str(i) for i in wikicode.filter_wikilinks()]
+                    res['outlink'] += outlinks
+                except:
+                    err['outlink'].append((id_, title, sys.exc_info()))
 
-        # Redirect: (id_, title, redirected_title)
-        if get_redirect:
-            m = elem.find(NAMESPACE+'redirect')
-            if m is not None:
-                redirected_title = m.attrib['title']
-                res['redirect'].append((id_, title, redirected_title))
+            # Redirect: (id_, title, redirected_title)
+            if get_redirect:
+                m = elem.find(NAMESPACE+'redirect')
+                if m is not None:
+                    redirected_title = m.attrib['title']
+                    res['redirect'].append((id_, title, redirected_title))
 
-        # Disambiguation: (id_, title)
-        if get_disambiguation:
-            if '{{disambiguation}}' in text.lower(): # TO-DO: using re
-                res['disambiguation'].append((id_, title))
+            # Disambiguation: (id_, title)
+            if get_disambiguation:
+                if '{{disambiguation}}' in text.lower(): # TO-DO: using re
+                    res['disambiguation'].append((id_, title))
 
-        # Plain Text: (id_, title, ptext)
-        if get_text:
-            # ptext = plaintext.get_plaintext(text)
-            ptext = gensimplaintext.filter_wiki(text)
-            res['text'].append((id_, title, ptext))
+            # Title: (title)
+            if get_title:
+                # if m is None and '{{disambiguation}}' not in text.lower():
+                res['title'].append(title)
 
-        # Wiki Markup: (id_, title, text)
-        if get_markup:
-            res['markup'].append((id_, title, text))
+            # Plain Text: (id_, title, ptext)
+            if get_text:
+                # ptext = plaintext.get_plaintext(text)
+                ptext = gensimplaintext.filter_wiki(text)
+                res['text'].append((id_, title, ptext))
 
-        elem.clear()
-        while elem.getprevious() is not None:
-            del elem.getparent()[0]
-    del context
-    return res, err
+            # Wiki Markup: (id_, title, text)
+            if get_markup:
+                res['markup'].append((id_, title, text))
+
+            elem.clear()
+            while elem.getprevious() is not None:
+                del elem.getparent()[0]
+        del context
+        # print '%s done.' % os.getpid()
+        return res, err
+    except:
+        print sys.exc_info()
+        return dict(), dict()
 
 def get_index(path):
     res = set()
-    for line in BZ2File(path):
+    for line in bz2file.BZ2File(path):
         m = re.search(('(\d+)\:\d+:.+'), line)
         res.add(int(m.group(1)))
     res = list(sorted(res, key=int))
     res.append(-1)
     return res
+
+def chunks(l, n):
+    """Yield successive n-sized chunks from l."""
+    for i in xrange(0, len(l), n):
+        yield l[i:i+n]
 
 result_list = list()
 def fast_iter_result(result):
@@ -109,7 +125,9 @@ def main():
                         help='Redirect')
     parser.add_argument('--disambiguation', '-d', action='store_true',
                         help='Disambiguation')
-    parser.add_argument('--text', '-t', action='store_true',
+    parser.add_argument('--title', '-t', action='store_true',
+                        help='Title')
+    parser.add_argument('--text', '-p', action='store_true',
                         help='Plain text')
     parser.add_argument('--markup', '-m', action='store_true',
                         help='Wiki markup')
@@ -131,25 +149,32 @@ def main():
     # NAMESPACE = '{http://www.mediawiki.org/xml/export-0.10/}'
     NAMESPACE = ''
     global CATEGORY
-    CATEGORY = ['outlink', 'redirect', 'disambiguation', 'text', 'markup']
+    CATEGORY = ['outlink', 'redirect', 'disambiguation',
+                'title', 'text', 'markup']
 
-    bz2f = open(inpath_xml, 'rb')
+    bz2f = io.open(inpath_xml, 'rb')
     bz2f_index = get_index(inpath_index)
     bz2f.seek(bz2f_index[0])
+    # size = len(bz2f_index) / int(args.nworker) + 1
+    size = 2000
+    split_index = [i[-1] for i in chunks(bz2f_index, size)]
     pool = multiprocessing.Pool(processes=int(args.nworker))
-    for i in bz2f_index:
-        if i == bz2f_index[0]:
-            continue
-        pages = '<pages>\n%s</pages>\n' % decompress(bz2f.read(i))
+    for i in split_index:
+        # print 'currect loc: %s' % (bz2f.tell())
+        if i == -1:
+            blocks = bz2f.read(-1)
+        else:
+            blocks = bz2f.read(i-bz2f.tell())
+        xml = bz2file.BZ2File(io.BytesIO(blocks))
+        pages = '<pages>\n%s</pages>\n' % xml.read()
+        # print pages.count('</page>')
         if i == -1:
             pages = pages.replace('</mediawiki>', '')
-        else:
-            bz2f.seek(i)
 
-        pool.apply_async(fast_iter, args=(BytesIO(pages), set(),
+        pool.apply_async(fast_iter, args=(io.BytesIO(pages), set(),
                                           args.outlink, args.redirect,
-                                          args.disambiguation, args.text,
-                                          args.markup, ),
+                                          args.disambiguation, args.title,
+                                          args.text, args.markup, ),
                          callback=fast_iter_result)
     pool.close()
     pool.join()
@@ -189,6 +214,17 @@ def main():
                 out.write('\t'.join(i) + '\n')
             err = r[1]
             errors['disambiguation'] += err['disambiguation']
+        out.close()
+
+    # Title
+    if args.title:
+        out = open('%s/%s-%s' % (outdir, 'title', filename), 'w')
+        for r in result_list:
+            res = r[0]
+            for i in res['title']:
+                out.write(i + '\n')
+            err = r[1]
+            errors['title'] += err['title']
         out.close()
 
     # Plain Text
