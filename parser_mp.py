@@ -10,7 +10,6 @@ import argparse
 import multiprocessing
 from lxml import etree
 import bz2file
-# from bz2 import decompress
 import mwparserfromhell
 from src import plaintext
 from src import gensimplaintext
@@ -19,22 +18,32 @@ from src import gensimplaintext
  Wikipedia XML dump parser
 '''
 
-def fast_iter(pages, select=set(),
+def fast_iter(beg, end, xmlpath,
               get_outlink=False, get_redirect=False, get_disambiguation=False,
               get_title=False, get_text=False, get_markup=False):
+    res = dict()
+    err = dict()
+    for c in CATEGORY:
+        res[c] = list()
+        err[c] = list()
     try:
-        res = dict()
-        err = dict()
-        for c in CATEGORY:
-            res[c] = list()
-            err[c] = list()
-
         # print '%s starts' % os.getpid()
+        bz2f = io.open(xmlpath, 'rb')
+        bz2f.seek(beg)
+        if end == -1:
+            blocks = bz2f.read(-1)
+        else:
+            blocks = bz2f.read(end - beg)
+
+        xml = bz2file.BZ2File(io.BytesIO(blocks))
+        pages = '<pages>\n%s</pages>\n' % xml.read()
+        if end == -1:
+            pages = pages.replace('</mediawiki>', '')
+
+        pages = io.BytesIO(pages)
         context = etree.iterparse(pages, events=('end',), tag=NAMESPACE+'page')
         for event, elem in context:
             id_ = elem.find(NAMESPACE+'id').text
-            if select and id_ not in select:
-                continue
             ns = elem.find(NAMESPACE+'ns').text
             if ns != '0': # Main page only
                 continue
@@ -86,9 +95,10 @@ def fast_iter(pages, select=set(),
         del context
         # print '%s done.' % os.getpid()
         return res, err
+
     except:
         print sys.exc_info()
-        return dict(), dict()
+        return res, err
 
 def get_index(path):
     res = set()
@@ -152,26 +162,11 @@ def main():
     CATEGORY = ['outlink', 'redirect', 'disambiguation',
                 'title', 'text', 'markup']
 
-    bz2f = io.open(inpath_xml, 'rb')
     bz2f_index = get_index(inpath_index)
-    bz2f.seek(bz2f_index[0])
-    # size = len(bz2f_index) / int(args.nworker) + 1
-    size = 2000
-    split_index = [i[-1] for i in chunks(bz2f_index, size)]
     pool = multiprocessing.Pool(processes=int(args.nworker))
-    for i in split_index:
-        # print 'currect loc: %s' % (bz2f.tell())
-        if i == -1:
-            blocks = bz2f.read(-1)
-        else:
-            blocks = bz2f.read(i-bz2f.tell())
-        xml = bz2file.BZ2File(io.BytesIO(blocks))
-        pages = '<pages>\n%s</pages>\n' % xml.read()
-        # print pages.count('</page>')
-        if i == -1:
-            pages = pages.replace('</mediawiki>', '')
-
-        pool.apply_async(fast_iter, args=(io.BytesIO(pages), set(),
+    for i in zip(bz2f_index, bz2f_index[1:]):
+        # print i
+        pool.apply_async(fast_iter, args=(i[0], i[1], inpath_xml,
                                           args.outlink, args.redirect,
                                           args.disambiguation, args.title,
                                           args.text, args.markup, ),
