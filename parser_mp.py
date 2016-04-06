@@ -40,8 +40,8 @@ def fast_iter(beg, end, xmlpath,
         if end == -1:
             pages = pages.replace('</mediawiki>', '')
 
-        pages = io.BytesIO(pages)
-        context = etree.iterparse(pages, events=('end',), tag=NAMESPACE+'page')
+        context = etree.iterparse(io.BytesIO(pages),
+                                  events=('end',), tag=NAMESPACE+'page')
         for event, elem in context:
             id_ = elem.find(NAMESPACE+'id').text
             ns = elem.find(NAMESPACE+'ns').text
@@ -57,8 +57,9 @@ def fast_iter(beg, end, xmlpath,
                 try:
                     wikicode = mwparserfromhell.parse(text)
                     # outlinks = wikicode.filter_wikilinks()
-                    outlinks = [str(i) for i in wikicode.filter_wikilinks()]
-                    res['outlink'] += outlinks
+                    outlinks = [title] + \
+                               [str(i) for i in wikicode.filter_wikilinks()]
+                    res['outlink'].append(outlinks)
                 except:
                     err['outlink'].append((id_, title, sys.exc_info()))
 
@@ -76,7 +77,6 @@ def fast_iter(beg, end, xmlpath,
 
             # Title: (title)
             if get_title:
-                # if m is None and '{{disambiguation}}' not in text.lower():
                 res['title'].append(title)
 
             # Plain Text: (id_, title, ptext)
@@ -108,11 +108,6 @@ def get_index(path):
     res = list(sorted(res, key=int))
     res.append(-1)
     return res
-
-def chunks(l, n):
-    """Yield successive n-sized chunks from l."""
-    for i in xrange(0, len(l), n):
-        yield l[i:i+n]
 
 result_list = list()
 def fast_iter_result(result):
@@ -184,7 +179,7 @@ def main():
         for r in result_list:
             res = r[0]
             for i in res['outlink']:
-                out.write(i + '\n')
+                out.write('\t'.join(i) + '\n')
             err = r[1]
             errors['outlink'] += err['outlink']
         out.close()
