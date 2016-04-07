@@ -58,7 +58,8 @@ def fast_iter(beg, end, xmlpath,
                     wikicode = mwparserfromhell.parse(text)
                     # outlinks = wikicode.filter_wikilinks()
                     outlinks = [title] + \
-                               [str(i) for i in wikicode.filter_wikilinks()]
+                               [str(i).replace('\n', ' ').replace('\t', ' ') \
+                                for i in wikicode.filter_wikilinks()]
                     res['outlink'].append(outlinks)
                 except:
                     err['outlink'].append((id_, title, sys.exc_info()))
