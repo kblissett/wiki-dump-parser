@@ -13,10 +13,16 @@ import bz2file
 import mwparserfromhell
 from src import plaintext
 from src import gensimplaintext
+from src import markup2text
 
 '''
  Wikipedia XML dump parser
 '''
+
+# Turkish
+RE_IMAGE='[rR]esim'
+RE_FILE='[dD]osya'
+RE_CAT='[kK]ategori'
 
 def fast_iter(beg, end, xmlpath,
               get_outlink=False, get_redirect=False, get_disambiguation=False,
@@ -55,10 +61,14 @@ def fast_iter(beg, end, xmlpath,
             # Outlink: (outlink)
             if get_outlink:
                 try:
-                    wikicode = mwparserfromhell.parse(text)
-                    # outlinks = wikicode.filter_wikilinks()
+                    # Markup with outlinks only
+                    markup_wol = markup2text.filter_wiki(text,
+                                                         image=RE_IMAGE,
+                                                         file=RE_FILE,
+                                                         category=RE_CAT)
+                    wikicode = mwparserfromhell.parse(markup_wol)
                     outlinks = [title] + \
-                               [str(i).replace('\n', ' ').replace('\t', ' ') \
+                               [re.sub('\n|\t', '', str(i)) \
                                 for i in wikicode.filter_wikilinks()]
                     res['outlink'].append(outlinks)
                 except:
@@ -83,12 +93,20 @@ def fast_iter(beg, end, xmlpath,
             # Plain Text: (id_, title, ptext)
             if get_text:
                 # ptext = plaintext.get_plaintext(text)
-                ptext = gensimplaintext.filter_wiki(text)
+                # ptext = gensimplaintext.filter_wiki(text)
+                ptext = markup2text.filter_wiki(text,
+                                                image=RE_IMAGE,
+                                                file=RE_FILE,
+                                                category=RE_CAT)
+                ptext = '\t'.join(filter(None,
+                                         ptext.replace('\t', ' ').split('\n')))
                 res['text'].append((id_, title, ptext))
 
-            # Wiki Markup: (id_, title, text)
+            # Wiki Markup: (id_, title, markup)
             if get_markup:
-                res['markup'].append((id_, title, text))
+                markup = '\t'.join(filter(None,
+                                          markup.replace('\t',' ').split('\n')))
+                res['markup'].append((id_, title, markup))
 
             elem.clear()
             while elem.getprevious() is not None:
@@ -220,37 +238,22 @@ def main():
 
     # Plain Text
     if args.text:
-        try:
-            os.mkdir('%s/text' % outdir)
-        except:
-            pass
+        out = open('%s/%s-%s' % (outdir, 'ptext', filename), 'w')
         for r in result_list:
             res = r[0]
-            for i in res['text']:
-                id_, title, ptext = i
-                if os.path.isfile('%s/text/%s' % (outdir, id_)):
-                    errors['text'].append((id_, title, 'Duplicated ID'))
-                    continue
-                out = open('%s/text/%s' % (outdir, id_), 'w')
-                out.write('%s\t%s\n%s' % (id_, title, ptext))
-                out.close()
+            for id_, title, ptext in res['text']:
+                out.write('%s\t%s\t%s\n' % (id_, title, ptext))
+        out.close()
 
     # Wiki Markup
     if args.markup:
-        try:
-            os.mkdir('%s/markup' % outdir)
-        except:
-            pass
+        out = open('%s/%s-%s' % (outdir, 'markup', filename), 'w')
         for r in result_list:
             res = r[0]
-            for i in res['markup']:
-                id_, title, markup = i
-                if os.path.isfile('%s/markup/%s' % (outdir, id_)):
-                    errors['markup'].append((id_, title, 'Duplicated ID'))
-                    continue
-                out = open('%s/markup/%s' % (outdir, id_), 'w')
-                out.write('%s\t%s\n%s' % (id_, title, markup))
-                out.close()
+            for id_, title, markup in res['markup']:
+                out.write('%s\t%s\t%s\n' % (id_, title, markup))
+        out.close()
+
     # Errors
     for c in CATEGORY:
         if errors[c]:
