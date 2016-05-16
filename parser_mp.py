@@ -11,9 +11,7 @@ import multiprocessing
 from lxml import etree
 import bz2file
 import mwparserfromhell
-from src import plaintext
-from src import gensimplaintext
-from src import markup2text
+from src import markup2textwo
 
 '''
  Wikipedia XML dump parser
@@ -62,7 +60,7 @@ def fast_iter(beg, end, xmlpath,
             if get_outlink:
                 try:
                     # Markup with outlinks only
-                    markup_wol = markup2text.filter_wiki(text,
+                    markup_wol = markup2textwo.filter_wiki(text,
                                                          image=RE_IMAGE,
                                                          file=RE_FILE,
                                                          category=RE_CAT)
@@ -83,7 +81,7 @@ def fast_iter(beg, end, xmlpath,
 
             # Disambiguation: (id_, title)
             if get_disambiguation:
-                if '{{disambiguation}}' in text.lower(): # TO-DO: using re
+                if '{{disambiguation}}' in text.lower(): # TO-DO: use re
                     res['disambiguation'].append((id_, title))
 
             # Title: (title)
@@ -93,8 +91,7 @@ def fast_iter(beg, end, xmlpath,
             # Plain Text: (id_, title, ptext)
             if get_text:
                 # ptext = plaintext.get_plaintext(text)
-                # ptext = gensimplaintext.filter_wiki(text)
-                ptext = markup2text.filter_wiki(text,
+                ptext = markup2textwo.filter_wiki(text,
                                                 image=RE_IMAGE,
                                                 file=RE_FILE,
                                                 category=RE_CAT)
