@@ -4,6 +4,9 @@ reload(sys)
 sys.setdefaultencoding('utf8')
 import time
 import json
+import re
+
+STRIP=r' \([^)]*\)|,' # remove () and ,
 
 def load_typed_titles(path):
     res = dict()
@@ -27,7 +30,8 @@ def typing(p_tt, p_data, outdir):
             try:
                 etype = typed_titles[kbid.encode('utf-8')]
             except:
-                print 'Can find: %s' % kbid
+                print 'Can find kbid: %s' % kbid
+                continue
             if etype == 'NIL':
                 continue
             if ol not in res:
@@ -37,6 +41,41 @@ def typing(p_tt, p_data, outdir):
             # if count % 10000 == 0:
             #     print '10000 kbids parsed'
     out = open('%s/%s' % (outdir, 'typed_outlinks.json'), 'w')
+    out.write(json.dumps(res))
+
+def count(p_tt, p_data, outdir):
+    typed_titles = load_typed_titles(p_tt)
+    res = dict()
+    outlinks = json.load(open(p_data))
+    count = 0
+    for ol in outlinks:
+        for kbid in outlinks[ol]:
+            if kbid == '#TOTAL#':
+                continue
+            try:
+                etype = typed_titles[kbid.encode('utf-8')]
+            except:
+                print 'Can find kbid: %s' % kbid
+                continue
+            if etype == 'NIL':
+                continue
+            if etype == 'MISC':
+                continue
+
+            toks = filter(None, re.sub(STRIP, '', ol).split(' '))
+            for t in toks:
+                if len(toks) == 1:
+                    tag = '%s-U' % etype
+                elif toks.index(t) == 0:
+                    tag = '%s-B' % etype
+                else:
+                    tag = '%s-I' % etype
+                if t not in res:
+                    res[t] = dict()
+                if tag not in res[t]:
+                    res[t][tag] = 0
+                res[t][tag] += outlinks[ol][kbid]
+    out = open('%s/%s' % (outdir, 'words.json'), 'w')
     out.write(json.dumps(res))
 
 if __name__ == '__main__':
@@ -51,5 +90,6 @@ if __name__ == '__main__':
     p_data = sys.argv[2]
     outdir = sys.argv[3]
     typing(p_tt, p_data, outdir)
+    count(p_tt, p_data, outdir)
 
     print time.time() - s

@@ -60,13 +60,6 @@ def typing(p_titles, outdir, lang):
 if __name__ == '__main__':
     s = time.time()
 
-    # p = '/data/m1/panx2/data/KBs/dump/wiki-dump/enwiki-20160305/output/title-enwiki-latest-pages-articles-multistream'
-    # outdir = '/data/m1/panx2/data/KBs/dump/wiki-dump/enwiki-20160305/output'
-    # typing(p, outdir)
-    # p = '/data/m1/panx2/data/KBs/dump/wiki-dump/trwiki-20160318/output/title-trwiki-latest-pages-articles-multistream'
-    # outdir = '/data/m1/panx2/data/KBs/dump/wiki-dump/trwiki-20160318/output/'
-    # typing(p, outdir, 'tr')
-
     if len(sys.argv) != 4:
         print 'USAGE: get_commonness.py ' \
             '<path to title flat> <outdir> <lang>'

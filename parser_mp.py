@@ -17,11 +17,6 @@ from src import markup2textwo
  Wikipedia XML dump parser
 '''
 
-# Turkish
-RE_IMAGE='[rR]esim'
-RE_FILE='[dD]osya'
-RE_CAT='[kK]ategori'
-
 def fast_iter(beg, end, xmlpath,
               get_outlink=False, get_redirect=False, get_disambiguation=False,
               get_title=False, get_text=False, get_markup=False):
@@ -161,6 +156,8 @@ def main():
     inpath_index = args.inpath_index
     outdir = args.outdir
     filename = os.path.split(inpath_xml)[1].replace('.xml.bz2', '')
+    lang = re.search('(\w+)wiki\-', filename).group(1)
+
     try:
         os.mkdir(outdir)
     except:
@@ -169,14 +166,27 @@ def main():
     global NAMESPACE
     # NAMESPACE = '{http://www.mediawiki.org/xml/export-0.10/}'
     NAMESPACE = ''
+    global RE_IMAGE
+    global RE_FILE
+    global RE_CAT
+    for line in open('re'):
+        tmp = line.strip().split(' ')
+        if lang == tmp[0]:
+            RE_IMAGE = tmp[1]
+            RE_FILE = tmp[2]
+            RE_CAT = tmp[3]
+            print 'Loaded re patterns:\nIMAGE: %s\nFILE: %s\nCATEGORY: %s' % \
+                (RE_IMAGE, RE_FILE, RE_CAT)
     global CATEGORY
     CATEGORY = ['outlink', 'redirect', 'disambiguation',
                 'title', 'text', 'markup']
 
+
     bz2f_index = get_index(inpath_index)
     pool = multiprocessing.Pool(processes=int(args.nworker))
+    print 'Number of workers: %s' % args.nworker
+    print 'Processing...'
     for i in zip(bz2f_index, bz2f_index[1:]):
-        # print i
         pool.apply_async(fast_iter, args=(i[0], i[1], inpath_xml,
                                           args.outlink, args.redirect,
                                           args.disambiguation, args.title,
@@ -262,4 +272,4 @@ def main():
 if __name__ == '__main__':
     s = time.time()
     main()
-    print time.time() - s
+    print 'Total Time: %s' % (time.time() - s)
