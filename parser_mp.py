@@ -11,6 +11,7 @@ import multiprocessing
 from lxml import etree
 import bz2file
 import mwparserfromhell
+from src import markup2text
 from src import markup2textwo
 
 '''
@@ -85,7 +86,7 @@ def fast_iter(beg, end, xmlpath,
 
             # Plain Text: (id_, title, ptext)
             if get_text:
-                # ptext = plaintext.get_plaintext(text)
+                # ptext = markup2text.filter_wiki(text)
                 ptext = markup2textwo.filter_wiki(text,
                                                 image=RE_IMAGE,
                                                 file=RE_FILE,
@@ -123,6 +124,13 @@ def get_index(path):
 result_list = list()
 def fast_iter_result(result):
     result_list.append(result)
+
+def load_re_patterns():
+    res = dict()
+    for line in open('re_patterns'):
+        tmp = line.strip().split(' ')
+        res[tmp[0]] = (tmp[1], tmp[2], tmp[3])
+    return res
 
 def main():
     parser = argparse.ArgumentParser(description=\
@@ -166,21 +174,23 @@ def main():
     global NAMESPACE
     # NAMESPACE = '{http://www.mediawiki.org/xml/export-0.10/}'
     NAMESPACE = ''
+    re_patterns = load_re_patterns()
     global RE_IMAGE
     global RE_FILE
     global RE_CAT
-    for line in open('re'):
-        tmp = line.strip().split(' ')
-        if lang == tmp[0]:
-            RE_IMAGE = tmp[1]
-            RE_FILE = tmp[2]
-            RE_CAT = tmp[3]
-            print 'Loaded re patterns:\nIMAGE: %s\nFILE: %s\nCATEGORY: %s' % \
-                (RE_IMAGE, RE_FILE, RE_CAT)
+    if lang in re_patterns:
+        RE_IMAGE = re_patterns[lang][0]
+        RE_FILE = re_patterns[lang][1]
+        RE_CAT = re_patterns[lang][2]
+    else:
+        RE_IMAGE = re_patterns['en'][0]
+        RE_FILE = re_patterns['en'][1]
+        RE_CAT = re_patterns['en'][2]
+    print 'Loaded re patterns:\nIMAGE: %s\nFILE: %s\nCATEGORY: %s' % \
+        (RE_IMAGE, RE_FILE, RE_CAT)
     global CATEGORY
     CATEGORY = ['outlink', 'redirect', 'disambiguation',
                 'title', 'text', 'markup']
-
 
     bz2f_index = get_index(inpath_index)
     pool = multiprocessing.Pool(processes=int(args.nworker))

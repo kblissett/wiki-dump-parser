@@ -8,7 +8,7 @@ import kbid2type
 sys.path.append('/data/m1/panx2/code/wiki-langlink-parser/search')
 import langlink_table_all2en
 
-def typing(p_titles, outdir):
+def typing_en(p_titles, outdir):
     count = dict()
     count['etype'] = 0
     res = list()
@@ -68,6 +68,8 @@ if __name__ == '__main__':
     path = sys.argv[1]
     outdir = sys.argv[2]
     lang = sys.argv[3]
-    typing(path, outdir, lang)
-
+    if lang == 'en':
+        typing_en(path, outdir)
+    else:
+        typing(path, outdir, lang)
     print time.time() - s
