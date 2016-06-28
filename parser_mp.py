@@ -12,12 +12,13 @@ from lxml import etree
 import bz2file
 import mwparserfromhell
 from src import markup2text
-from src import markup2textwo
+from src import markup2textwl
 
 '''
  Wikipedia XML dump parser
 '''
 
+PWD=os.path.dirname(os.path.abspath(__file__))
 def fast_iter(beg, end, xmlpath,
               get_outlink=False, get_redirect=False, get_disambiguation=False,
               get_title=False, get_text=False, get_markup=False):
@@ -56,11 +57,11 @@ def fast_iter(beg, end, xmlpath,
             if get_outlink:
                 try:
                     # Markup with outlinks only
-                    markup_wol = markup2textwo.filter_wiki(text,
-                                                         image=RE_IMAGE,
-                                                         file=RE_FILE,
-                                                         category=RE_CAT)
-                    wikicode = mwparserfromhell.parse(markup_wol)
+                    markup_wl = markup2textwl.filter_wiki(text,
+                                                          image=RE_IMAGE,
+                                                          file=RE_FILE,
+                                                          category=RE_CAT)
+                    wikicode = mwparserfromhell.parse(markup_wl)
                     outlinks = [title] + \
                                [re.sub('\n|\t', '', str(i)) \
                                 for i in wikicode.filter_wikilinks()]
@@ -86,11 +87,14 @@ def fast_iter(beg, end, xmlpath,
 
             # Plain Text: (id_, title, ptext)
             if get_text:
-                # ptext = markup2text.filter_wiki(text)
-                ptext = markup2textwo.filter_wiki(text,
+                ptext = markup2text.filter_wiki(text,
                                                 image=RE_IMAGE,
                                                 file=RE_FILE,
                                                 category=RE_CAT)
+                # ptext = markup2textwl.filter_wiki(text,
+                #                                   image=RE_IMAGE,
+                #                                   file=RE_FILE,
+                #                                   category=RE_CAT)
                 ptext = '\t'.join(filter(None,
                                          ptext.replace('\t', ' ').split('\n')))
                 res['text'].append((id_, title, ptext))
@@ -98,7 +102,7 @@ def fast_iter(beg, end, xmlpath,
             # Wiki Markup: (id_, title, markup)
             if get_markup:
                 markup = '\t'.join(filter(None,
-                                          markup.replace('\t',' ').split('\n')))
+                                          text.replace('\t',' ').split('\n')))
                 res['markup'].append((id_, title, markup))
 
             elem.clear()
@@ -127,7 +131,7 @@ def fast_iter_result(result):
 
 def load_re_patterns():
     res = dict()
-    for line in open('re_patterns'):
+    for line in open('%s/re_patterns' % PWD):
         tmp = line.strip().split(' ')
         res[tmp[0]] = (tmp[1], tmp[2], tmp[3])
     return res
@@ -211,7 +215,7 @@ def main():
 
     # Outlink
     if args.outlink:
-        out = open('%s/%s-%s' % (outdir, 'outlink', filename), 'w')
+        out = open('%s/%s-%s' % (outdir, 'outlink', lang), 'w')
         for r in result_list:
             res = r[0]
             for i in res['outlink']:
@@ -222,7 +226,7 @@ def main():
 
     # Redirect
     if args.redirect:
-        out = open('%s/%s-%s' % (outdir, 'redirect', filename), 'w')
+        out = open('%s/%s-%s' % (outdir, 'redirect', lang), 'w')
         for r in result_list:
             res = r[0]
             for i in res['redirect']:
@@ -233,7 +237,7 @@ def main():
 
     # Disambiguation
     if args.disambiguation:
-        out = open('%s/%s-%s' % (outdir, 'disambiguation', filename), 'w')
+        out = open('%s/%s-%s' % (outdir, 'disambiguation', lang), 'w')
         for r in result_list:
             res = r[0]
             for i in res['disambiguation']:
@@ -244,7 +248,7 @@ def main():
 
     # Title
     if args.title:
-        out = open('%s/%s-%s' % (outdir, 'title', filename), 'w')
+        out = open('%s/%s-%s' % (outdir, 'title', lang), 'w')
         for r in result_list:
             res = r[0]
             for i in res['title']:
@@ -255,7 +259,7 @@ def main():
 
     # Plain Text
     if args.text:
-        out = open('%s/%s-%s' % (outdir, 'ptext', filename), 'w')
+        out = open('%s/%s-%s' % (outdir, 'ptext', lang), 'w')
         for r in result_list:
             res = r[0]
             for id_, title, ptext in res['text']:
@@ -264,7 +268,7 @@ def main():
 
     # Wiki Markup
     if args.markup:
-        out = open('%s/%s-%s' % (outdir, 'markup', filename), 'w')
+        out = open('%s/%s-%s' % (outdir, 'markup', lang), 'w')
         for r in result_list:
             res = r[0]
             for id_, title, markup in res['markup']:
@@ -274,7 +278,7 @@ def main():
     # Errors
     for c in CATEGORY:
         if errors[c]:
-            out_err = open('%s/%s-%s.err' % (outdir, c, filename), 'w')
+            out_err = open('%s/%s-%s.err' % (outdir, c, lang), 'w')
             for i in errors[c]:
                 out_err.write(str(i) + '\n')
             out_err.close()

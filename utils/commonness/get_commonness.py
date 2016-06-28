@@ -79,10 +79,10 @@ def index(commonness, index_dir, procs=1, limitmb=1048, multisegment=False):
 
 def parse(p_outlink, p_redirect, score=False, outdir=''):
     res = dict()
+    res_t2t = dict() # Title to Text
     err = list()
     rd_table = load_redirect_table(p_redirect)
     pages = dict()
-
 
     for line in open(p_outlink, 'r'):
         tmp = line.strip().split('\t')
@@ -104,6 +104,9 @@ def parse(p_outlink, p_redirect, score=False, outdir=''):
             pass
         res[text][title] = 1
         res[text]['#TOTAL#'] = 1
+        res_t2t[title] = dict()
+        res_t2t[title][text] = 1
+        res_t2t[title]['#TOTAL#'] = 1
 
         # Count outlinks in this page
         for i in pages[pt]:
@@ -146,6 +149,14 @@ def parse(p_outlink, p_redirect, score=False, outdir=''):
                 res[text][title] += 1
                 res[text]['#TOTAL#'] += 1
 
+                if title not in res_t2t:
+                    res_t2t[title] = dict()
+                    res_t2t[title]['#TOTAL#'] = 0
+                if text not in res_t2t[title]:
+                    res_t2t[title][text] = 0
+                res_t2t[title][text] += 1
+                res_t2t[title]['#TOTAL#'] += 1
+
     # Compute Commonness score
     if score:
         for text in res:
@@ -161,6 +172,9 @@ def parse(p_outlink, p_redirect, score=False, outdir=''):
             pass
         out = open('%s/%s' % (outdir, 'commonness.json'), 'w')
         out.write(json.dumps(res))
+        out.close()
+        out = open('%s/%s' % (outdir, 'title2text.json'), 'w')
+        out.write(json.dumps(res_t2t))
         out.close()
         if err:
             err_out = open('%s/%s' % (outdir, 'commonness.err'), 'w')

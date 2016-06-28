@@ -20,7 +20,23 @@ RE_P14 = re.compile('\[\[Category:[^][]*\]\]', re.UNICODE) # categories
 RE_P15 = re.compile('\[\[([fF]ile:|[iI]mage)[^]]*(\]\])', re.UNICODE)
 
 
-def filter_wiki(raw):
+def filter_wiki(raw, image='', file='', category=''):
+    global RE_P7_
+    global RE_P8_
+    global RE_P14_
+    global RE_P15_
+    RE_P16 = ''
+    RE_P17 = ''
+    RE_P18 = ''
+    RE_P19 = ''
+    if image:
+        RE_P7_ = re.compile('\n\[\[%s(.*?)(\|.*?)*\|(.*?)\]\]' % image, re.UNICODE) # keep description of images
+    if file:
+        RE_P8_ = re.compile('\n\[\[%s(.*?)(\|.*?)*\|(.*?)\]\]' % file, re.UNICODE) # keep description of files
+    if image and file:
+        RE_P15_ = re.compile('\[\[(%s:|%s)[^]]*(\]\])' % (image, file), re.UNICODE)
+    if category:
+        RE_P14_ = re.compile('\[\[%s:[^][]*\]\]' % category, re.UNICODE) # categories
     """
     Filter out wiki mark-up from `raw`, leaving only text. `raw` is either unicode
     or utf-8 encoded string.
@@ -49,8 +65,10 @@ def remove_markup(text):
         text = re.sub(RE_P10, "", text) # remove math content
         text = re.sub(RE_P11, "", text) # remove all remaining tags
         text = re.sub(RE_P14, '', text) # remove categories
+        if RE_P14_:
+            text = re.sub(RE_P14_, '', text) # remove categories
         text = re.sub(RE_P5, '\\3', text) # remove urls, keep description
-#        # text = re.sub(RE_P6, '\\2', text) # simplify links, keep description only
+        text = re.sub(RE_P6, '\\2', text) # simplify links, keep description only
         # remove table markup
         text = text.replace('||', '\n|') # each table cell on a separate line
         text = re.sub(RE_P12, '\n', text) # remove formatting lines
@@ -119,4 +137,9 @@ def remove_file(s):
         m = match.group(0)
         caption = m[:-2].split('|')[-1]
         s = s.replace(m, caption, 1)
+    if RE_P15_:
+        for match in re.finditer(RE_P15_, s):
+            m = match.group(0)
+            caption = m[:-2].split('|')[-1]
+            s = s.replace(m, caption, 1)
     return s
